@@ -1,4 +1,4 @@
-from userinterface import UserInterface
+from ui.userinterface import UserInterface
 
 def main():
     # run the application
