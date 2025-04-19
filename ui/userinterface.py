@@ -1,13 +1,13 @@
+import tkinter as tk
+from tkinter import filedialog
 from processor.processor import Processor
 
 class UserInterface:
     def __init__(self, processor):
         self.processor = processor
 
-    def start():
-        # TODO: use tkinter for to ask for file path
-        filename = ""
-
+    def start(self):
+        '''
         # Ask the user for the endogenous control
         endo_ctrl = ""
         while True:
@@ -23,7 +23,8 @@ class UserInterface:
                 break
             else:
                 print("Invalid value. Please try again")
-        
+        '''
+                
         # TODO: Call processor functions to calculate depending on the endogenous control
 
         # TODO: Display wells to omit

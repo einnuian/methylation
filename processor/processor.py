@@ -2,15 +2,14 @@ import pandas as pd
 from datamanagement.da_parser import DAParser
 
 class Processor:
-    def __init__(self, filename):
-        self.filename = filename
-        self.parser = DAParser(self.filename)
-        self.df = self.parser.readfile()
+    def __init__(self, parser):
+        self.parser = parser
     
     def find_reference_control(cq_values):
+        pass
     
     def calculate_eqcq(cq_values):
-        return 0
+        pass
     
     # Calculate delta Cq values
     def calculate_delta_eqcq(eqcq_m, eqcq_um):
