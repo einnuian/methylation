@@ -20,13 +20,13 @@ class UserInterface:
         if test == "BWS":
             target_1_to_omit = self.processor.process_ICR1()
             target_2_to_omit = self.processor.process_ICR2()
-            print("ICR1: ", target_1_to_omit)
-            print("ICR2: ", target_2_to_omit)
+            print("--------ICR1--------\n", target_1_to_omit)
+            print("--------ICR2--------\n", target_2_to_omit)
         elif test == "RSS":
             target_1_to_omit = self.processor.process_GRB()
             target_2_to_omit = self.processor.process_PEG()
-            print("GRB: ", target_1_to_omit)
-            print("PEG: ", target_2_to_omit)
+            print("--------GRB--------\n", target_1_to_omit)
+            print("--------PEG--------\n", target_2_to_omit)
 
         '''
         # Ask the user for the endogenous control

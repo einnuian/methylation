@@ -43,6 +43,11 @@ class Helper:
         std_4 = statistics.stdev([val_1, val_2, val_3]) #stdev does not contain well 4
         std_dict = {0:std_1, 1:std_2, 2:std_3, 3:std_4}
         min_val = min(std_dict.values())
+
+        # Check if the smallest stdev is >= 3%
+        if min_val >= 3:
+            return min_val + 1 # min_val + 1 will be distinct from the to_omit value
+
         to_omit = 0
         for key, value in std_dict.items():
             if value == min_val: 
@@ -74,8 +79,16 @@ class Helper:
             val_2 = pivoted["dEqCq"].iloc[i+1]
             val_3 = pivoted["dEqCq"].iloc[i+2]
             val_4 = pivoted["dEqCq"].iloc[i+3]
-            to_omit = pivoted["Well Position"].iloc[Helper.find_outliers(val_1, val_2, val_3, val_4) + i]
-            omitted_wells.append(to_omit)
+
+            outlier = Helper.find_outliers(val_1, val_2, val_3, val_4)
+
+            # Check if find_outliers detected a stdev >= 3%
+            if outlier >= 4:
+                print("Warning: ", pivoted["Sample"].iloc[i], " has a standard deviation of ", outlier, "%% among its replicates" )
+                omitted_wells.append("X")
+            else:
+                to_omit = pivoted["Well Position"].iloc[outlier + i]
+                omitted_wells.append(to_omit)
             #Omit from the original table
             #target_df = target_df[~(df["Well"] == to_omit)]
 
