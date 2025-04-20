@@ -3,10 +3,31 @@ from tkinter import filedialog
 from processor.processor import Processor
 
 class UserInterface:
-    def __init__(self, processor):
+    def __init__(self, processor:Processor):
         self.processor = processor
 
     def start(self):
+        # Ask the user for the type of methylation test
+        test = ""
+        while True:
+            test = input("Enter BWS or RSS:")
+            test = test.upper()
+            if test in ["BWS", "RSS"]: break
+            else: print("Invalid test.")
+
+        target_1_to_omit = []
+        target_2_to_omit = []
+        if test == "BWS":
+            target_1_to_omit = self.processor.process_ICR1()
+            target_2_to_omit = self.processor.process_ICR2()
+            print("ICR1: ", target_1_to_omit)
+            print("ICR2: ", target_2_to_omit)
+        elif test == "RSS":
+            target_1_to_omit = self.processor.process_GRB()
+            target_2_to_omit = self.processor.process_PEG()
+            print("GRB: ", target_1_to_omit)
+            print("PEG: ", target_2_to_omit)
+
         '''
         # Ask the user for the endogenous control
         endo_ctrl = ""

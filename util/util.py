@@ -48,3 +48,34 @@ class Helper:
                 to_omit = key
                 break
         return to_omit
+    
+    """
+    Find outliers for each set of technical replicates according to the target
+
+    Args:
+        df (DataFrame):     pandas dataframe to be processed
+        m_target (string):  name of the methylated target
+        um_target (string): name of the unmethylated target
+    
+    Returns:
+        omitted_wells (list): list of positions of wells to be omitted
+    """
+    def process(df, m_target, um_target):
+        target_df = df[df["Target"].isin([m_target, um_target])]
+        pivoted = target_df.pivot(index=["Sample", "Well", "Well Position"], columns="Target", values="Cq").reset_index() # Move Sample and Well back into the dataframe
+        pivoted["dEqCq"] = pivoted[m_target] - pivoted[um_target] #Assuming the endogenous control is UM
+        pivoted = pivoted.sort_values("Well")
+
+        omitted_wells = []
+
+        for i in range(0, len(pivoted), 4):
+            val_1 = pivoted["dEqCq"].iloc[i]
+            val_2 = pivoted["dEqCq"].iloc[i+1]
+            val_3 = pivoted["dEqCq"].iloc[i+2]
+            val_4 = pivoted["dEqCq"].iloc[i+3]
+            to_omit = pivoted["Well Position"].iloc[Helper.find_outliers(val_1, val_2, val_3, val_4) + i]
+            omitted_wells.append(to_omit)
+            #Omit from the original table
+            #target_df = target_df[~(df["Well"] == to_omit)]
+
+        return(omitted_wells)
