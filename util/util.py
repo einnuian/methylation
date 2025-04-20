@@ -1,5 +1,6 @@
 import pandas as pd
 import tkinter as tk
+import platform
 from tkinter import filedialog
 import statistics
 
@@ -79,3 +80,17 @@ class Helper:
             #target_df = target_df[~(df["Well"] == to_omit)]
 
         return(omitted_wells)
+    
+    def detect_os():
+        os_type = platform.system()
+
+        if os_type == "Windows":
+            print("Running on Windows")
+        elif os_type == "Linux":
+            print("Running on Linux")
+        elif os_type == "Darwin":
+            print("Running on macOS")
+        else:
+            print("Running on unknown OS: {os_type}")
+
+        return os_type
