@@ -14,7 +14,13 @@ class DAParser:
         Returns:
             df: the DataFrame containing the content of the csv file
         """
-        df = pd.read_csv(self.filename, skiprows=22, usecols=["Well", 
+        with open(self.filename, "r") as f:
+            for i, line in enumerate(f):
+                if "Well" in line and "Sample" in line:
+                    header_row = i
+                    break
+        
+        df = pd.read_csv(self.filename, skiprows=header_row, usecols=["Well", 
                                                                    "Well Position", 
                                                                    "Omit", "Sample", 
                                                                    "Target", "Cq", 
@@ -22,6 +28,7 @@ class DAParser:
                                                                    "Threshold"])
         # Set "Undetermined" to 40 and cast Cq values to type float
         df["Cq"] = df["Cq"].replace("Undetermined", 40)
+        df["Cq"] = df["Cq"].replace("UNDETERMINED", 40)
         df["Cq"] = pd.to_numeric(df["Cq"])
         return df
 

@@ -44,9 +44,11 @@ class Helper:
         std_dict = {0:std_1, 1:std_2, 2:std_3, 3:std_4}
         min_val = min(std_dict.values())
 
+        '''
         # Check if the smallest stdev is >= 3%
         if min_val >= 3:
             return min_val + 1 # min_val + 1 will be distinct from the to_omit value
+        '''
 
         to_omit = 0
         for key, value in std_dict.items():

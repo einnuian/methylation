@@ -43,5 +43,5 @@ class Processor:
     
     def process_PEG(self):
         df = self.parser.readfile()
-        omitted_wells = Helper.process(df, "PEG_M", "PEG_UM")
+        omitted_wells = Helper.process(df, "PEG1_M", "PEG1_UM")
         return(omitted_wells)
