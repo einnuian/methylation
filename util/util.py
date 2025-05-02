@@ -25,6 +25,23 @@ class Helper:
         return control_df
     
     """
+    Transform the given df to calculate and add the dEqCq column
+    Return the transformed dataframe
+    """
+    def add_deqcq(df, m_target, um_target):
+        target_df = df[df["Target"].isin([m_target, um_target])]
+        pivoted = target_df.pivot(index=["Sample", "Well", "Well Position"], columns="Target", values="Cq").reset_index() # Move Sample and Well back into the dataframe
+        pivoted["dEqCq"] = pivoted[m_target] - pivoted[um_target] #Assuming the endogenous control is UM
+        pivoted = pivoted.sort_values("Well")
+        return pivoted
+    
+    """
+    Find the mean dEqCq values by target given a data frame
+    """
+    def calculate_mean_deqcq(df):
+        pass
+    
+    """
     Find the outlier given four values
 
     Args:
@@ -50,7 +67,7 @@ class Helper:
             return min_val + 1 # min_val + 1 will be distinct from the to_omit value
         '''
 
-        to_omit = 0
+        to_omit = -1
         for key, value in std_dict.items():
             if value == min_val: 
                 to_omit = key
@@ -69,27 +86,24 @@ class Helper:
         omitted_wells (list): list of positions of wells to be omitted
     """
     def process(df, m_target, um_target):
-        target_df = df[df["Target"].isin([m_target, um_target])]
-        pivoted = target_df.pivot(index=["Sample", "Well", "Well Position"], columns="Target", values="Cq").reset_index() # Move Sample and Well back into the dataframe
-        pivoted["dEqCq"] = pivoted[m_target] - pivoted[um_target] #Assuming the endogenous control is UM
-        pivoted = pivoted.sort_values("Well")
+        new_df = Helper.add_deqcq(df, m_target, um_target)
 
         omitted_wells = []
 
-        for i in range(0, len(pivoted), 4):
-            val_1 = pivoted["dEqCq"].iloc[i]
-            val_2 = pivoted["dEqCq"].iloc[i+1]
-            val_3 = pivoted["dEqCq"].iloc[i+2]
-            val_4 = pivoted["dEqCq"].iloc[i+3]
+        for i in range(0, len(new_df), 4):
+            val_1 = new_df["dEqCq"].iloc[i]
+            val_2 = new_df["dEqCq"].iloc[i+1]
+            val_3 = new_df["dEqCq"].iloc[i+2]
+            val_4 = new_df["dEqCq"].iloc[i+3]
 
             outlier = Helper.find_outliers(val_1, val_2, val_3, val_4)
 
             # Check if find_outliers detected a stdev >= 3%
             if outlier >= 4:
-                print("Warning: ", pivoted["Sample"].iloc[i], " has a standard deviation of ", outlier, "%% among its replicates" )
+                print("Warning: ", new_df["Sample"].iloc[i], " has a standard deviation of ", outlier, "%% among its replicates" )
                 omitted_wells.append("X")
             else:
-                to_omit = pivoted["Well Position"].iloc[outlier + i]
+                to_omit = new_df["Well Position"].iloc[outlier + i]
                 omitted_wells.append(to_omit)
             #Omit from the original table
             #target_df = target_df[~(df["Well"] == to_omit)]
@@ -107,5 +121,4 @@ class Helper:
             print("Running on macOS")
         else:
             print("Running on unknown OS: {os_type}")
-
         return os_type

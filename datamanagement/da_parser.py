@@ -29,6 +29,7 @@ class DAParser:
         # Set "Undetermined" to 40 and cast Cq values to type float
         df["Cq"] = df["Cq"].replace("Undetermined", 40)
         df["Cq"] = df["Cq"].replace("UNDETERMINED", 40)
+        # Convert all CQ values to numeric
         df["Cq"] = pd.to_numeric(df["Cq"])
         return df
 
