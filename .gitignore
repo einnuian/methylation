@@ -8,3 +8,6 @@ venv/
 
 # Ignore csv files
 *.csv
+
+# Ignore eds files
+*.eds
