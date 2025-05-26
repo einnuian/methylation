@@ -3,34 +3,58 @@ import tkinter as tk
 import platform
 from tkinter import filedialog
 import statistics
+from collections import defaultdict
 
 class Helper:
-    def __init__(self, df):
-        self.df = df
-
-    # Uses the data frame containing the controls and the given target (ICR1 or ICR2) to select the reference sample
-    def select_reference_control(self, target):
-        assert target in ("ICR1", "ICR2"), "Target must be ICR1 or ICR2" 
-        if target == "ICR1":
-            return 0
-        elif target == "ICR2":
-            return 0
             
     # Filter out controls according to targets
-    def filter_ctrl_by_target(self, target):
+    def filter_ctrl_by_target(df, target):
         target_m = target.upper() + "_M"
         target_um = target.upper() + "_UM"
-        control_df = self.df[(self.df["Target"].isin([target_m, target_um])) & 
-                             (self.df["Sample"].str.contains("control", case=False))]
+        control_df = df[(df["Target"].isin([target_m, target_um])) & 
+                        (df["Sample"].str.contains("control", case=False))]
         return control_df
     
     """
+    Identify the unique existing targets dynamically
+
+    Args:
+        df: the panda dataframe to be processed
+
+    Return:
+        target_pairs: dict with base names as keys and pairs of target as values
+    """
+    def make_target_pairs(df):
+        target_list = df["Target"].unique()
+        if len(target_list) % 2 != 0:
+            raise ValueError("Number of unique targets must be even.")
+
+        # Dictionary to hold pairs
+        target_pairs = defaultdict(list)
+
+        # Group target by base name (i.e. "ICR1")
+        for target in target_list:
+            base = target.split("_")[0] # Get the base name of the target
+            target_pairs[base].append(target)
+
+        return target_pairs
+    
+    """
     Transform the given df to calculate and add the dEqCq column
-    Return the transformed dataframe
+
+    Args:
+        df: the panda dataframe to be processed
+        m_target: name of the methylated target
+        um_target: name of the unmethylated target
+
+    Return:
+        pivoted: the transformed dataframe
     """
     def add_deqcq(df, m_target, um_target):
         target_df = df[df["Target"].isin([m_target, um_target])]
-        pivoted = target_df.pivot(index=["Sample", "Well", "Well Position"], columns="Target", values="Cq").reset_index() # Move Sample and Well back into the dataframe
+        pivoted = target_df.pivot(index=["Sample", "Well", "Well Position"], 
+                                  columns="Target", 
+                                  values="Cq").reset_index() # Move Sample and Well back into the dataframe
         pivoted["dEqCq"] = pivoted[m_target] - pivoted[um_target] #Assuming the endogenous control is UM
         pivoted = pivoted.sort_values("Well")
         return pivoted
@@ -61,11 +85,7 @@ class Helper:
         std_dict = {0:std_1, 1:std_2, 2:std_3, 3:std_4}
         min_val = min(std_dict.values())
 
-        '''
-        # Check if the smallest stdev is >= 3%
-        if min_val >= 3:
-            return min_val + 1 # min_val + 1 will be distinct from the to_omit value
-        '''
+        #TODO: Check for data with high standard deviation 
 
         to_omit = -1
         for key, value in std_dict.items():
@@ -75,7 +95,7 @@ class Helper:
         return to_omit
     
     """
-    Find outliers for each set of technical replicates according to the target
+    Find outliers to be omitted for each set of technical replicates according to the target
 
     Args:
         df (DataFrame):     pandas dataframe to be processed
@@ -85,7 +105,7 @@ class Helper:
     Returns:
         omitted_wells (list): list of positions of wells to be omitted
     """
-    def process(df, m_target, um_target):
+    def wells_to_omit(df, m_target, um_target):
         new_df = Helper.add_deqcq(df, m_target, um_target)
 
         omitted_wells = []
@@ -109,16 +129,3 @@ class Helper:
             #target_df = target_df[~(df["Well"] == to_omit)]
 
         return(omitted_wells)
-    
-    def detect_os():
-        os_type = platform.system()
-
-        if os_type == "Windows":
-            print("Running on Windows")
-        elif os_type == "Linux":
-            print("Running on Linux")
-        elif os_type == "Darwin":
-            print("Running on macOS")
-        else:
-            print("Running on unknown OS: {os_type}")
-        return os_type

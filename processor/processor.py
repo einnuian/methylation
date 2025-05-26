@@ -1,6 +1,7 @@
 import pandas as pd
 from datamanagement.da_parser import DAParser
 from util.util import Helper
+from collections import defaultdict
 
 class Processor:
     def __init__(self, parser:DAParser):
@@ -26,22 +27,20 @@ class Processor:
         """
         return 0
     
-    def process_ICR1(self):
+    """
+    Process the parsed dataframe and identify the wells to be omitted by target
+
+    Return:
+        omitted_wells: dict with targets as keys and list of wells be omitted as values
+    """
+    def process(self):
         df = self.parser.readfile()
-        omitted_wells = Helper.process(df, "ICR1_M", "ICR1_UM")
+        target_pairs = Helper.make_target_pairs(df)
+
+        omitted_wells = defaultdict(list)
+
+        for key, value in target_pairs.items():
+            omitted_wells[key] = Helper.wells_to_omit(df, value[0], value[1])
+        
         return(omitted_wells)
     
-    def process_ICR2(self):
-        df = self.parser.readfile()
-        omitted_wells = Helper.process(df, "ICR2_M", "ICR2_UM")
-        return(omitted_wells)
-    
-    def process_GRB(self):
-        df = self.parser.readfile()
-        omitted_wells = Helper.process(df, "GRB_M", "GRB_UM")
-        return(omitted_wells)
-    
-    def process_PEG(self):
-        df = self.parser.readfile()
-        omitted_wells = Helper.process(df, "PEG1_M", "PEG1_UM")
-        return(omitted_wells)
