@@ -1,5 +1,3 @@
-import tkinter as tk
-from tkinter import filedialog
 from processor.processor import Processor
 
 class UserInterface:

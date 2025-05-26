@@ -8,6 +8,9 @@ def main():
     # let user browse files and get file path
     browser = Browser()
     filepath = browser.file_path
+    if len(filepath) == 0:
+        print("Exiting the application.")
+        return
 
     # Create a parser with the given filepath
     parser = DAParser(filepath)

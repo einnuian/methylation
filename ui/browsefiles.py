@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog
-from util.util import Helper
 
 class Browser:
     def __init__(self):
