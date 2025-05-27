@@ -48,10 +48,10 @@ df["Cq"] = pd.to_numeric(df["Cq"])
 #print(df.dtypes)
 #print(df.head(10))
 
-'''
-Find outliers for each sample in the df
-'''
 def test_find_outliers(df):
+    '''
+    Find outliers for each sample in the df
+    '''
     icr1_df = df[df["Target"].isin(["ICR1_M", "ICR1_UM"])]
     pivoted = icr1_df.pivot(index=["Sample", "Well", "Well Position"], columns="Target", values="Cq").reset_index() # Move Sample and Well back into the dataframe
     pivoted["dEqCq"] = pivoted["ICR1_M"] - pivoted["ICR1_UM"] #Assuming the endogenous control is UM
@@ -77,10 +77,10 @@ def test_find_outliers(df):
     #print(icr1_df)
     #print(omitted_wells)
 
-'''
-Make list of target pairs
-'''
 def test_make_target_list(df):
+    '''
+    Make list of target pairs
+    '''
     target_list = df["Target"].unique()
     if len(target_list) % 2 != 0:
        raise ValueError("Number of unique targets must be even.")
@@ -93,4 +93,7 @@ def test_make_target_list(df):
         base = target.split("_")[0] # Get the base name of the target
         target_pairs[base].append(target)
 
-test_make_target_list(df)
+#test_make_target_list(df)
+
+def test_mean_EqCq(df):
+    mean_df = df.groupby("Sample")["Cq"].mean().reset_index()
