@@ -1,5 +1,6 @@
 import statistics
 from collections import defaultdict
+from config import GLOBAL_STD_THRESHOLD
 
 class Helper:
             
@@ -63,3 +64,27 @@ class Helper:
                 to_omit = key
                 break
         return to_omit
+
+    def find_outliers(values:list, num):
+        """
+        Find the value from a list of values that has the biggest difference from a provided number while minimizing the std
+
+        Args:
+            values (list): list containing the values
+
+        Returns:
+            to_omit (int): the index of the value to omit
+        """
+        # Keep track of min difference
+        min_diff = 100
+        index = -1
+
+        for i in range(len(values)):
+            # New list that doesn't contain the current value
+            new = values[:i] + values[i+1:]
+            diff = abs(statistics.mean(new) - num)
+            std = statistics.stdev(new)
+            if diff < min_diff and std <= GLOBAL_STD_THRESHOLD:
+                min_diff = diff       
+                index = i
+        return index

@@ -1,7 +1,9 @@
 import pandas as pd
+import statistics
 from datamanagement.da_parser import DAParser
 from util.util import Helper
 from collections import defaultdict
+from config import GLOBAL_STD_THRESHOLD
 
 class Processor:
     def __init__(self, parser:DAParser):
@@ -55,9 +57,9 @@ class Target:
         self.df["dEqCq Mean"] = self.df.groupby("Sample")["dEqCq"].transform("mean")
         self.df["dEqCq Std"] = self.df.groupby("Sample")["dEqCq"].transform("std")
     
-    def pick_reference_sample(self, median):
+    def pick_reference_samples(self, median):
         """
-        Pick the reference sample according to the delta EqCq median
+        Pick three reference samples according to the delta EqCq median
         This function operates on df
 
         Args:
@@ -72,18 +74,26 @@ class Target:
         # Get the absolute difference from the median
         ctrl_df["Diff"] = abs(ctrl_df["dEqCq Mean"] - median)
 
+        count = 0
+        controls = []
         # Find the minimum difference
-        while True:
-            closest_idx = ctrl_df["Diff"].idxmin()
-
-            # If standard deviation is too high, omit this sample and repeat
-            if ctrl_df.loc[closest_idx, "dEqCq Std"] >= 0.2:
-                ctrl_df.drop(closest_idx, inplace=True)
-            else:
+        while count < 3:
+            if ctrl_df.empty:
+                print("No valid controls")
                 break
 
-        control = ctrl_df.loc[closest_idx, "Sample"]
-        return control
+            closest_idx = ctrl_df["Diff"].idxmin()
+            sample = ctrl_df.loc[closest_idx, "Sample"]
+
+            # If standard deviation is too high, omit this sample and repeat
+            if ctrl_df.loc[closest_idx, "dEqCq Std"] >= GLOBAL_STD_THRESHOLD:
+                ctrl_df = ctrl_df[ctrl_df["Sample"] != sample]
+            else:
+                controls.append(ctrl_df.loc[closest_idx, "Sample"])
+                ctrl_df = ctrl_df[ctrl_df["Sample"] != sample]
+                count +=1
+
+        return controls
 
     def wells_to_omit(self):
         """
@@ -110,22 +120,23 @@ class Target:
         if original_mean >= 0.01 and original_median >= 0.01 and skewness_percent >= 10:
             print(f"Warning: The dEqCq values of target {self.m_target.split('_')[0]} are skewed by more than 10% from the median. Please examine the data before proceeding.")
         
-        # Get the reference sample
-        reference = self.pick_reference_sample(original_median)
-        print(reference)
+        # Get the set of three controls
+        controls = self.pick_reference_samples(original_median)
+        print(controls)
         omitted_wells = []
 
+        # Detect outliers
         for i in range(0, len(self.df), 4):
-            val_1 = self.df["dEqCq"].iloc[i]
-            val_2 = self.df["dEqCq"].iloc[i+1]
-            val_3 = self.df["dEqCq"].iloc[i+2]
-            val_4 = self.df["dEqCq"].iloc[i+3]
+            values = [self.df["dEqCq"].iloc[i],
+                      self.df["dEqCq"].iloc[i+1],
+                      self.df["dEqCq"].iloc[i+2],
+                      self.df["dEqCq"].iloc[i+3]]
 
-            outlier = Helper.find_outliers(val_1, val_2, val_3, val_4)
+            outlier = Helper.find_outliers(values, original_median)
 
             # Check if find_outliers detected a stdev >= 3%
-            if outlier >= 4:
-                print("Warning: ", self.df["Sample"].iloc[i], " has a standard deviation of ", outlier, "%% among its replicates" )
+            if outlier == -1:
+                print(f"Warning: {self.df['Sample'].iloc[i]} has a standard deviation of {statistics.stdev(values)} among its {self.m_target.split('_')[0]} replicates" )
                 omitted_wells.append("X")
             else:
                 to_omit = self.df["Well Position"].iloc[outlier + i]
