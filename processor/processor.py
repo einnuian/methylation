@@ -3,7 +3,7 @@ import statistics
 from datamanagement.da_parser import DAParser
 from util.util import Helper
 from collections import defaultdict
-from config import GLOBAL_STD_THRESHOLD
+from config import GLOBAL_CQ_DIFF, GLOBAL_STD_THRESHOLD
 
 class Processor:
     def __init__(self, parser:DAParser):
@@ -34,6 +34,14 @@ class Target:
         self.df = pd.DataFrame() # Empty df
         self.m_target = m_target
         self.um_target = um_target
+        self.reference: str
+
+    def set_reference(self, sample):
+        self.reference = sample
+    
+    def get_reference_meanEqCq(self):
+        mean = self.df[self.df["Sample"] == self.reference]["dEqCq Mean"]
+        return mean
 
     def transform_df(self):
         """
@@ -56,17 +64,35 @@ class Target:
         # Add mean dEqCq and std dEqCq
         self.df["dEqCq Mean"] = self.df.groupby("Sample")["dEqCq"].transform("mean")
         self.df["dEqCq Std"] = self.df.groupby("Sample")["dEqCq"].transform("std")
-    
-    def pick_reference_samples(self, median):
+
+    def calculate_Rq_diff(self, values):
         """
-        Pick three reference samples according to the delta EqCq median
-        This function operates on df
+        Calculate the difference between Rq min and Rq max of a given sample (using one stdev)
+
+        Args:
+            values: list of dEqCq values
+
+        Returns:
+            diff: the absolute difference 
+        """
+        reference_mean = self.get_reference_meanEqCq()
+        mean = statistics.mean(values)
+        std = statistics.stdev(values)
+        rq_min = 2^(-(mean-reference_mean)-std)
+        rq_max = 2^(-(mean-reference_mean)+std)
+        diff = abs(rq_max - rq_min)
+        return diff
+    
+    def pick_controls(self, median):
+        """
+        Pick three controls as reference according to the delta EqCq median
+        This function operates on self.df
 
         Args:
             median: median of all delta EqCq values
 
         Returns:
-            reference: name of control with mean delta EqCq value closest to the overall median and valid stdev
+            controls: list containing the three selected controls
         """
         # Retain only the controls
         ctrl_df = self.df[self.df["Sample"].str.contains("control", case=False)].copy() # .copy() avoids the SettingWithCopyWarning
@@ -84,6 +110,9 @@ class Target:
 
             closest_idx = ctrl_df["Diff"].idxmin()
             sample = ctrl_df.loc[closest_idx, "Sample"]
+
+            # If this is the first control picked, also assign it as the reference sample
+            self.set_reference(sample)
 
             # If standard deviation is too high, omit this sample and repeat
             if ctrl_df.loc[closest_idx, "dEqCq Std"] >= GLOBAL_STD_THRESHOLD:
@@ -121,7 +150,7 @@ class Target:
             print(f"Warning: The dEqCq values of target {self.m_target.split('_')[0]} are skewed by more than 10% from the median. Please examine the data before proceeding.")
         
         # Get the set of three controls
-        controls = self.pick_reference_samples(original_median)
+        controls = self.pick_controls(original_median)
         print(controls)
         omitted_wells = []
 
