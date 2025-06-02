@@ -227,13 +227,13 @@ class Target:
                 to_omit = self.df["Well Position"].iloc[outlier + i]
                 omitted_wells.append(to_omit)
 
-        # New df without the omitted wells
-        new_df = self.df[~self.df['Well Position'].isin(omitted_wells)]
+        # New df without the omitted wells. Update the dEqCq Mean column
+        new_df = self.df[~self.df['Well Position'].isin(omitted_wells)].copy()
+        new_df['dEqCq Mean'] = new_df.groupby("Sample")["dEqCq"].transform("mean")
 
         # Get the set of three controls
         new_median = new_df["dEqCq"].median()
-        print(f"New median: {new_median}")
         controls = self.pick_controls(new_df, new_median)
-        print(controls)
+        print(f"Controls set for {self.target}: {controls}")
 
         return(omitted_wells)
