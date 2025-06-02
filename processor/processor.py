@@ -3,7 +3,7 @@ import statistics
 from datamanagement.da_parser import DAParser
 from util.util import Helper
 from collections import defaultdict
-from config import GLOBAL_CQ_DIFF, GLOBAL_STD_THRESHOLD
+from config import GLOBAL_RQ_DIFF_THRESHOLD, GLOBAL_STD_THRESHOLD
 
 class Processor:
     def __init__(self, parser:DAParser):
@@ -34,15 +34,9 @@ class Target:
         self.df = pd.DataFrame() # Empty df
         self.m_target = m_target
         self.um_target = um_target
+        self.target = f"{m_target.split('_')[0]}"
         self.reference: str
-
-    def set_reference(self, sample):
-        self.reference = sample
     
-    def get_reference_meanEqCq(self):
-        mean = self.df[self.df["Sample"] == self.reference]["dEqCq Mean"]
-        return mean
-
     def transform_df(self):
         """
         Transform the original df to the desired df to be processed
@@ -65,7 +59,7 @@ class Target:
         self.df["dEqCq Mean"] = self.df.groupby("Sample")["dEqCq"].transform("mean")
         self.df["dEqCq Std"] = self.df.groupby("Sample")["dEqCq"].transform("std")
 
-    def calculate_Rq_diff(self, values):
+    def calculate_rq_diff(self, values):
         """
         Calculate the difference between Rq min and Rq max of a given sample (using one stdev)
 
@@ -78,12 +72,46 @@ class Target:
         reference_mean = self.get_reference_meanEqCq()
         mean = statistics.mean(values)
         std = statistics.stdev(values)
-        rq_min = 2^(-(mean-reference_mean)-std)
-        rq_max = 2^(-(mean-reference_mean)+std)
+        rq_min = 2**(-(mean-reference_mean)-std)
+        rq_max = 2**(-(mean-reference_mean)+std)
         diff = abs(rq_max - rq_min)
         return diff
     
-    def pick_controls(self, median):
+    def set_reference(self, median):
+        """
+        Pick the reference sample according to the delta EqCq median
+        This function operates on self.df
+
+        Args:
+            median: median of all delta EqCq values
+
+        Returns:
+            reference: the selected reference control whose dEqCq mean is closest to the median
+        """
+        # Retain only the controls
+        ctrl_df = self.df[self.df["Sample"].str.contains("control", case=False)].copy()
+        
+        # Get the absolute difference from the median
+        ctrl_df["Diff"] = abs(ctrl_df["dEqCq Mean"] - median)
+
+        # Find the minimum difference
+        while True:
+            closest_idx = ctrl_df["Diff"].idxmin()
+            sample = ctrl_df.loc[closest_idx, "Sample"]
+
+            # If standard deviation is too high, omit this sample and repeat
+            if ctrl_df.loc[closest_idx, 'dEqCq Std'] >= GLOBAL_STD_THRESHOLD:
+                ctrl_df = ctrl_df[ctrl_df['Sample'] != sample]
+            else:
+                break
+        
+        self.reference = sample
+
+    def get_reference_meanEqCq(self):
+        mean = self.df[self.df["Sample"] == self.reference]["dEqCq Mean"].values[0]
+        return mean
+    
+    def pick_controls(self, df, median):
         """
         Pick three controls as reference according to the delta EqCq median
         This function operates on self.df
@@ -95,7 +123,8 @@ class Target:
             controls: list containing the three selected controls
         """
         # Retain only the controls
-        ctrl_df = self.df[self.df["Sample"].str.contains("control", case=False)].copy() # .copy() avoids the SettingWithCopyWarning
+        ctrl_df = df[df["Sample"].str.contains("control", case=False)].copy() # .copy() avoids the SettingWithCopyWarning
+        #ctrl_df.reset_index(drop=True)
 
         # Get the absolute difference from the median
         ctrl_df["Diff"] = abs(ctrl_df["dEqCq Mean"] - median)
@@ -105,24 +134,51 @@ class Target:
         # Find the minimum difference
         while count < 3:
             if ctrl_df.empty:
-                print("No valid controls")
+                print(f"Target {self.target} has no valid controls")
                 break
 
             closest_idx = ctrl_df["Diff"].idxmin()
             sample = ctrl_df.loc[closest_idx, "Sample"]
 
-            # If this is the first control picked, also assign it as the reference sample
-            self.set_reference(sample)
+            # Calculate the RQ difference for the sample
+            values = ctrl_df[ctrl_df['Sample'] == sample]['dEqCq'].tolist()
+            rq_diff = self.calculate_rq_diff(values)
 
-            # If standard deviation is too high, omit this sample and repeat
-            if ctrl_df.loc[closest_idx, "dEqCq Std"] >= GLOBAL_STD_THRESHOLD:
+            # If RQ difference is too high, omit this sample and repeat
+            if rq_diff > GLOBAL_RQ_DIFF_THRESHOLD:
                 ctrl_df = ctrl_df[ctrl_df["Sample"] != sample]
+                #print(f"Warning: {sample} from target {self.target} an RQ difference of {rq_diff}. Omitted.")
             else:
                 controls.append(ctrl_df.loc[closest_idx, "Sample"])
                 ctrl_df = ctrl_df[ctrl_df["Sample"] != sample]
                 count +=1
 
         return controls
+
+    def find_outliers(self, values:list, num):
+        """
+        Find the value from a list of values that has the biggest difference from a provided number while minimizing the RQ difference
+        This function operates on self.df
+
+        Args:
+            values (list): list containing the values
+
+        Returns:
+            to_omit (int): the index of the value to omit
+        """
+        # Keep track of min difference
+        min_diff = 100
+        index = -1
+
+        for i in range(len(values)):
+            # New list that doesn't contain the current value
+            new = values[:i] + values[i+1:]
+            diff = abs(statistics.mean(new) - num)
+            rq_diff = self.calculate_rq_diff(new)
+            if diff < min_diff and rq_diff <= GLOBAL_RQ_DIFF_THRESHOLD:
+                min_diff = diff       
+                index = i
+        return index
 
     def wells_to_omit(self):
         """
@@ -141,36 +197,43 @@ class Target:
         samples_list = self.df["Sample"].unique()
 
         # Calcuate the original median and mean of dEqCq
-        # Check for skewness of the data
         original_median = self.df["dEqCq"].median()
         original_mean = self.df["dEqCq"].mean()
         #print("Median: ", original_median)
+
+        # Check for skewness of the data
         skewness_percent = abs((original_median - original_mean) / original_median) * 100
         if original_mean >= 0.01 and original_median >= 0.01 and skewness_percent >= 10:
-            print(f"Warning: The dEqCq values of target {self.m_target.split('_')[0]} are skewed by more than 10% from the median. Please examine the data before proceeding.")
+            print(f"Warning: The dEqCq values of target {self.target} are skewed by more than 10% from the median. Please examine the data before proceeding.")
         
-        # Get the set of three controls
-        controls = self.pick_controls(original_median)
-        print(controls)
-        omitted_wells = []
+        # Set the reference control first
+        self.set_reference(original_median)
 
         # Detect outliers
+        omitted_wells = []
         for i in range(0, len(self.df), 4):
             values = [self.df["dEqCq"].iloc[i],
                       self.df["dEqCq"].iloc[i+1],
                       self.df["dEqCq"].iloc[i+2],
                       self.df["dEqCq"].iloc[i+3]]
 
-            outlier = Helper.find_outliers(values, original_median)
+            outlier = self.find_outliers(values, original_median)
 
-            # Check if find_outliers detected a stdev >= 3%
+            # Check if find_outliers detected a high stdev
             if outlier == -1:
-                print(f"Warning: {self.df['Sample'].iloc[i]} has a standard deviation of {statistics.stdev(values)} among its {self.m_target.split('_')[0]} replicates" )
+                print(f"Warning: {self.df['Sample'].iloc[i]} has a high standard deviation among its {self.target} replicates" )
                 omitted_wells.append("X")
             else:
                 to_omit = self.df["Well Position"].iloc[outlier + i]
                 omitted_wells.append(to_omit)
-            #Omit from the original table
-            #target_df = target_df[~(df["Well"] == to_omit)]
+
+        # New df without the omitted wells
+        new_df = self.df[~self.df['Well Position'].isin(omitted_wells)]
+
+        # Get the set of three controls
+        new_median = new_df["dEqCq"].median()
+        print(f"New median: {new_median}")
+        controls = self.pick_controls(new_df, new_median)
+        print(controls)
 
         return(omitted_wells)
