@@ -72,8 +72,8 @@ class Target:
         reference_mean = self.get_reference_meanEqCq()
         mean = statistics.mean(values)
         std = statistics.stdev(values)
-        rq_min = 2**(-(mean-reference_mean)-std)
-        rq_max = 2**(-(mean-reference_mean)+std)
+        rq_min = 2**(mean-reference_mean-std)
+        rq_max = 2**(mean-reference_mean+std)
         diff = abs(rq_max - rq_min)
         return diff
     
@@ -199,7 +199,9 @@ class Target:
         # Calcuate the original median and mean of dEqCq
         original_median = self.df["dEqCq"].median()
         original_mean = self.df["dEqCq"].mean()
+        
         #print("Median: ", original_median)
+        #print("Mean: ", original_mean)
 
         # Check for skewness of the data
         skewness_percent = abs((original_median - original_mean) / original_median) * 100
@@ -235,5 +237,7 @@ class Target:
         new_median = new_df["dEqCq"].median()
         controls = self.pick_controls(new_df, new_median)
         print(f"Controls set for {self.target}: {controls}")
+
+        print(f"Reference sample for {self.target}: {self.reference}")
 
         return(omitted_wells)
