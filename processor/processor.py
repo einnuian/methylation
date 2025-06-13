@@ -8,6 +8,9 @@ from config import GLOBAL_RQ_DIFF_THRESHOLD, GLOBAL_STD_THRESHOLD
 class Processor:
     def __init__(self, parser:DAParser):
         self.parser = parser
+        self.omitted_wells = defaultdict(list)
+        self.reference = defaultdict(str)
+        self.controls = defaultdict(list)
     
     def process(self):
         """
@@ -19,13 +22,11 @@ class Processor:
         df = self.parser.readfile()
         target_pairs = Helper.make_target_pairs(df)
 
-        omitted_wells = defaultdict(list)
-
         for key, value in target_pairs.items():
             target = Target(df, value[0], value[1])
-            omitted_wells[key] = target.wells_to_omit()
-        
-        return(omitted_wells)
+            self.omitted_wells[key] = target.wells_to_omit()
+            self.reference[key] = target.reference
+            self.controls[key] = target.controls
     
 
 class Target:
@@ -36,6 +37,7 @@ class Target:
         self.um_target = um_target
         self.target = f"{m_target.split('_')[0]}"
         self.reference: str
+        self.controls = [] # List of controls to be used for the target
     
     def transform_df(self):
         """
@@ -235,9 +237,6 @@ class Target:
 
         # Get the set of three controls
         new_median = new_df["dEqCq"].median()
-        controls = self.pick_controls(new_df, new_median)
-        print(f"Controls set for {self.target}: {controls}")
-
-        print(f"Reference sample for {self.target}: {self.reference}")
+        self.controls = self.pick_controls(new_df, new_median)
 
         return(omitted_wells)
