@@ -72,8 +72,8 @@ class Target:
         reference_mean = self.get_reference_meanEqCq()
         mean = statistics.mean(values)
         std = statistics.stdev(values)
-        rq_min = 2**(mean-reference_mean-std)
-        rq_max = 2**(mean-reference_mean+std)
+        rq_min = 2**(reference_mean-mean-std)
+        rq_max = 2**(reference_mean-mean+std)
         diff = abs(rq_max - rq_min)
         return diff
     
