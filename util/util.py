@@ -36,27 +36,28 @@ class Helper:
 
         return target_pairs
 
-    def find_outliers(val_1, val_2, val_3, val_4):
+    def minimize_stdev(values:list):
         """
         Find the outlier given four values
 
         Args:
-            val_1 (float)
-            val_2 (float)
-            val_3 (float)
-            val_4 (float)
+            values (list): list containing the four values to be compared
 
         Returns:
             to_omit (int): the index of the value to omit such that the stdev is minimized
         """
+        val_1 = values[0]
+        val_2 = values[1]
+        val_3 = values[2]  
+        val_4 = values[3]
+
+        # Calculate the standard deviation for remaining wells
         std_1 = statistics.stdev([val_2, val_3, val_4]) #stdev does not contain well 1
         std_2 = statistics.stdev([val_1, val_3, val_4]) #stdev does not contain well 2
         std_3 = statistics.stdev([val_1, val_2, val_4]) #stdev does not contain well 3
         std_4 = statistics.stdev([val_1, val_2, val_3]) #stdev does not contain well 4
         std_dict = {0:std_1, 1:std_2, 2:std_3, 3:std_4}
         min_val = min(std_dict.values())
-
-        #TODO: Check for data with high standard deviation 
 
         to_omit = -1
         for key, value in std_dict.items():
