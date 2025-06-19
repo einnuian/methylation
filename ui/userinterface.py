@@ -6,11 +6,11 @@ class UserInterface:
 
     def start(self):
         self.processor.process()
-        for key, value in self.processor.omitted_wells.items():
-            print("\nWells to omit for target:")
-            print(f"--------{key}--------\n", value)
-            controls = self.processor.controls[key]
-            reference = self.processor.reference[key]
-            print(f"Controls set for {key}: {controls}")
-            print(f"Reference sample for {key}: {reference}")
+        for key, value in self.processor.targets.items():
             print("\n")
+            print(f"--------{key}--------\n")
+            print("Wells to omit:\n", value.ommited_wells)
+            print("\n")
+            print(f"Controls set for {key}: {value.controls}")
+            print(f"Reference sample for {key}: {value.reference}")
+        print("\n")
