@@ -8,9 +8,7 @@ from config import GLOBAL_RQ_DIFF_THRESHOLD, GLOBAL_STD_THRESHOLD
 class Processor:
     def __init__(self, parser:DAParser):
         self.parser = parser
-        self.omitted_wells = defaultdict(list)
-        self.reference = defaultdict(str)
-        self.controls = defaultdict(list)
+        self.targets = defaultdict(Target) # dict containing the target objects
     
     def process(self):
         """
@@ -23,43 +21,43 @@ class Processor:
         target_pairs = Helper.make_target_pairs(df)
 
         for key, value in target_pairs.items():
-            target = Target(df, value[0], value[1])
-            self.omitted_wells[key] = target.wells_to_omit()
-            self.reference[key] = target.reference
-            self.controls[key] = target.controls
+            self.targets[key] = Target(df, value[0], value[1])
     
 
 class Target:
     def __init__(self, orig_df: pd.DataFrame, m_target: str, um_target: str):
         self.orig_df = orig_df
-        self.df = pd.DataFrame() # Empty df
         self.m_target = m_target
         self.um_target = um_target
         self.target = f"{m_target.split('_')[0]}"
-        self.reference: str
+        self.reference: str # reference sample
         self.controls = [] # List of controls to be used for the target
+        self.df = self.transform_df()
+        self.ommited_wells = self.wells_to_omit()
     
     def transform_df(self):
         """
         Transform the original df to the desired df to be processed
         """
         # Retain only the target of interest
-        self.df = self.orig_df[self.orig_df["Target"].isin([self.m_target, self.um_target])]
+        df = self.orig_df[self.orig_df["Target"].isin([self.m_target, self.um_target])]
 
         # Remove Hela and NTC
-        self.df = self.df[~self.df["Sample"].str.contains("Hela", case=False)]
-        self.df = self.df [~self.df ["Sample"].str.contains("NTC", case=False)]
+        df = df[~df["Sample"].str.contains("Hela", case=False)]
+        df = df [~df ["Sample"].str.contains("NTC", case=False)]
 
         # Pivot and add dEqCq column
-        self.df = self.df.pivot(index=["Sample", "Well", "Well Position"], 
+        df = df.pivot(index=["Sample", "Well", "Well Position"], 
                                   columns="Target", 
                                   values="Cq").reset_index() # Move Sample and Well back into the dataframe
-        self.df["dEqCq"] = self.df[self.m_target] - self.df[self.um_target] #Assuming the endogenous control is UM
-        self.df = self.df.sort_values("Well")
+        df["dEqCq"] = df[self.m_target] - df[self.um_target] #Assuming the endogenous control is UM
+        df = df.sort_values("Well")
 
         # Add mean dEqCq and std dEqCq
-        self.df["dEqCq Mean"] = self.df.groupby("Sample")["dEqCq"].transform("mean")
-        self.df["dEqCq Std"] = self.df.groupby("Sample")["dEqCq"].transform("std")
+        df["dEqCq Mean"] = df.groupby("Sample")["dEqCq"].transform("mean")
+        df["dEqCq Std"] = df.groupby("Sample")["dEqCq"].transform("std")
+
+        return df.reset_index(drop=True)
 
     def calculate_rq_diff(self, values):
         """
@@ -194,10 +192,6 @@ class Target:
         Returns:
             omitted_wells (list): list of positions of wells to be omitted
         """
-        self.transform_df()
-
-        samples_list = self.df["Sample"].unique()
-
         # Calcuate the original median and mean of dEqCq
         original_median = self.df["dEqCq"].median()
         original_mean = self.df["dEqCq"].mean()
@@ -226,10 +220,11 @@ class Target:
             # Check if find_outliers detected a high stdev
             if outlier == -1:
                 print(f"Warning: {self.df['Sample'].iloc[i]} has a high standard deviation among its {self.target} replicates" )
-                omitted_wells.append("X")
-            else:
-                to_omit = self.df["Well Position"].iloc[outlier + i]
-                omitted_wells.append(to_omit)
+                # Minimize the stdev
+                outlier = Helper.minimize_stdev(values)
+
+            to_omit = self.df["Well Position"].iloc[outlier + i]
+            omitted_wells.append(to_omit)
 
         # New df without the omitted wells. Update the dEqCq Mean column
         new_df = self.df[~self.df['Well Position'].isin(omitted_wells)].copy()
