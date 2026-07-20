@@ -1,0 +1,13 @@
+# Ignore Python bytecode
+*.pyc
+__pycache__/
+
+# Ignore virtual environment directories
+venv/
+.venv/
+
+# Ignore csv files
+*.csv
+
+# Ignore eds files
+*.eds
