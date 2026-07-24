@@ -1,4 +1,5 @@
 import pandas as pd
+from config import UNDETERMINED_CQ
 
 class DAParser:
     def __init__(self, filename):
@@ -26,9 +27,9 @@ class DAParser:
                                                                    "Target", "Cq", 
                                                                    "Cq Mean", "Cq SD", 
                                                                    "Threshold"])
-        # Set "Undetermined" to 40 and cast Cq values to type float
-        df["Cq"] = df["Cq"].replace("Undetermined", 40)
-        df["Cq"] = df["Cq"].replace("UNDETERMINED", 40)
+        # Set "Undetermined" to the sentinel Cq and cast Cq values to type float
+        df["Cq"] = df["Cq"].replace("Undetermined", UNDETERMINED_CQ)
+        df["Cq"] = df["Cq"].replace("UNDETERMINED", UNDETERMINED_CQ)
         # Convert all CQ values to numeric
         df["Cq"] = pd.to_numeric(df["Cq"])
         return df

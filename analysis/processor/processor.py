@@ -3,7 +3,7 @@ import statistics
 from datamanagement.da_parser import DAParser
 from util.util import Helper
 from collections import defaultdict
-from config import GLOBAL_RQ_DIFF_THRESHOLD, GLOBAL_STD_THRESHOLD
+from config import GLOBAL_RQ_DIFF_THRESHOLD, GLOBAL_STD_THRESHOLD, UNDETERMINED_CQ, get_positive_control
 
 class Processor:
     def __init__(self, parser:DAParser):
@@ -42,8 +42,9 @@ class Target:
         # Retain only the target of interest
         df = self.orig_df[self.orig_df["Target"].isin([self.m_target, self.um_target])]
 
-        # Remove Hela and NTC
-        df = df[~df["Sample"].str.contains("Hela", case=False)]
+        # Remove the positive control and NTC. regex=False keeps a configured name literal.
+        positive_control = get_positive_control()
+        df = df[~df["Sample"].str.contains(positive_control, case=False, regex=False)]
         df = df [~df ["Sample"].str.contains("NTC", case=False)]
 
         # Pivot and add dEqCq column
@@ -80,7 +81,7 @@ class Target:
     def set_reference(self, median):
         """
         Pick the reference sample according to the delta EqCq median
-        This function operates on self.df
+        This fuction operates on self.df
 
         Args:
             median: median of all delta EqCq values
@@ -180,6 +181,25 @@ class Target:
                 index = i
         return index
 
+    def flag_failed_wells(self):
+        """
+        Flag wells that were reported as "Undetermined" while the rest of their sample amplified
+
+        A sample whose replicates are uniformly "Undetermined" for a target is left unflagged
+
+        Returns:
+            failed (Series): boolean Series aligned to self.df, True for failed wells
+        """
+        failed = pd.Series(False, index=self.df.index)
+
+        for target in (self.m_target, self.um_target):
+            is_sentinel = self.df[target] == UNDETERMINED_CQ
+            # True across every row of a sample whose replicates are all sentinel for this target
+            uniform = is_sentinel.groupby(self.df["Sample"]).transform("all")
+            failed |= is_sentinel & ~uniform
+
+        return failed
+
     def wells_to_omit(self):
         """
         Find outliers to be omitted for each set of technical replicates according to the target
@@ -192,9 +212,12 @@ class Target:
         Returns:
             omitted_wells (list): list of positions of wells to be omitted
         """
-        # Calcuate the original median and mean of dEqCq
-        original_median = self.df["dEqCq"].median()
-        original_mean = self.df["dEqCq"].mean()
+        # Flag wells that failed to amplify so they cannot skew the target-wide reference
+        failed_wells = self.flag_failed_wells()
+
+        # Calculate the original median and mean of dEqCq
+        original_median = self.df.loc[~failed_wells, "dEqCq"].median()
+        original_mean = self.df.loc[~failed_wells, "dEqCq"].mean()
         
         #print("Median: ", original_median)
         #print("Mean: ", original_mean)
@@ -209,21 +232,41 @@ class Target:
 
         # Detect outliers
         omitted_wells = []
-        for i in range(0, len(self.df), 4):
-            values = [self.df["dEqCq"].iloc[i],
-                      self.df["dEqCq"].iloc[i+1],
-                      self.df["dEqCq"].iloc[i+2],
-                      self.df["dEqCq"].iloc[i+3]]
+        for sample, group in self.df.groupby("Sample", sort=False):
+            # Every sample is expected to be run in quadruplicate
+            if len(group) != 4:
+                print(f"Warning: {sample} in target {self.target} has {len(group)} replicates instead of 4. Skipping this sample.")
+                continue
+
+            # A well missing one of the two target measurements pivots to NaN
+            if group["dEqCq"].isna().any():
+                missing = group.loc[group["dEqCq"].isna(), "Well Position"].tolist()
+                print(f"Warning: {sample} in target {self.target} is missing a target measurement at well(s) {', '.join(missing)}. Skipping this sample.")
+                continue
+
+            # Wells that failed to amplify carry a sentinel Cq, not a usable measurement
+            group_failed = failed_wells.loc[group.index]
+            if group_failed.any():
+                failed_positions = group.loc[group_failed, "Well Position"].tolist()
+                if len(failed_positions) > 1:
+                    print(f"Warning: {sample} in target {self.target} has {len(failed_positions)} wells that failed to amplify ({', '.join(failed_positions)}). Skipping this sample.")
+                    continue
+                # A single failed well is the omitted one, leaving three usable replicates
+                print(f"Warning: {sample} in target {self.target} has a well that failed to amplify ({failed_positions[0]}). Omitting it.")
+                omitted_wells.append(failed_positions[0])
+                continue
+
+            values = group["dEqCq"].tolist()
 
             outlier = self.find_outliers(values, original_median)
 
             # Check if find_outliers detected a high stdev
             if outlier == -1:
-                print(f"Warning: {self.df['Sample'].iloc[i]} has a high standard deviation among its {self.target} replicates" )
+                print(f"Warning: {sample} has a high standard deviation among its {self.target} replicates" )
                 # Minimize the stdev
                 outlier = Helper.minimize_stdev(values)
 
-            to_omit = self.df["Well Position"].iloc[outlier + i]
+            to_omit = group["Well Position"].iloc[outlier]
             omitted_wells.append(to_omit)
 
         # New df without the omitted wells. Update the dEqCq Mean column
