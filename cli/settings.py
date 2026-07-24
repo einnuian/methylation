@@ -8,6 +8,9 @@ DEFAULTS = {
     "positive_control": "HCT116",
 }
 
+# Settings key holding the report template for each assay type
+TEMPLATE_KEYS = {"bws": "template_bws", "rss": "template_rss"}
+
 
 def load_settings():
     """
