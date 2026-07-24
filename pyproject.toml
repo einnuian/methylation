@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "methylation-tools"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0",
+    "pywin32>=311",
+    "pandas>=2.0.0",
+]
+
+[project.scripts]
+methyl = "cli.main:methyl"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cli*"]
