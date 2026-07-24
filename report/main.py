@@ -13,18 +13,39 @@ from report_generator import generate_report_win32, get_control_selection, extra
 from cli.settings import load_settings, save_setting
 
 
-def get_last_directory():
+def get_template_file(assay_type):
     """
-    Read the last used directory from the shared settings file.
+    Read the report template configured for an assay type.
+
+    No template ships with the tool, so one must be chosen with
+    `methyl config set-template` before any report can be generated.
+
+    Args:
+        assay_type (str): Detected assay type, e.g. 'BWS'
+
+    Returns:
+        Path: Path to the configured template, or None if none has been set
+    """
+    configured = load_settings().get(f"template_{assay_type.lower()}")
+
+    return Path(configured) if configured else None
+
+
+def get_saved_directory(key):
+    """
+    Read a remembered directory from the shared settings file.
+
+    Args:
+        key (str): Settings key holding the directory, e.g. 'last_directory'
 
     Returns:
         str: The saved directory if it still exists, otherwise None
     """
-    last_dir = load_settings().get('last_directory')
+    saved = load_settings().get(key)
 
     # Discard the saved directory if it has since been moved or deleted
-    if last_dir and Path(last_dir).exists():
-        return last_dir
+    if saved and Path(saved).exists():
+        return saved
 
     return None
 
@@ -37,20 +58,20 @@ def detect_assay_type(filename):
         filename (str): Name of the file
 
     Returns:
-        tuple: (assay_type, template_name, target1_name, target2_name)
-               e.g., ('BWS', 'qs6_bws_template.xlsm', 'ICR1', 'ICR2')
+        tuple: (assay_type, target1_name, target2_name)
+               e.g., ('BWS', 'ICR1', 'ICR2')
     """
     filename_upper = filename.upper()
 
     if filename_upper.startswith('BWS'):
-        return 'BWS', 'qs6_bws_template.xlsm', 'ICR1', 'ICR2'
+        return 'BWS', 'ICR1', 'ICR2'
     elif filename_upper.startswith('RSS'):
-        return 'RSS', 'qs6_rss_template.xlsm', 'PEG1', 'GRB'
+        return 'RSS', 'PEG1', 'GRB'
     else:
         # Default to BWS if cannot detect
         print(f"Warning: Could not detect assay type from filename: {filename}")
         print("Defaulting to BWS (ICR1/ICR2)")
-        return 'BWS', 'qs6_bws_template.xlsm', 'ICR1', 'ICR2'
+        return 'BWS', 'ICR1', 'ICR2'
 
 
 def select_file(target_name, initial_dir=None):
@@ -93,18 +114,52 @@ def select_file(target_name, initial_dir=None):
     return Path(file_path) if file_path else None
 
 
+def select_output_directory(initial_dir=None):
+    """
+    Opens a directory dialog to choose where the generated reports are written.
+
+    Args:
+        initial_dir (Path or str, optional): Initial directory for the dialog
+
+    Returns:
+        Path: Path to the chosen directory, or None if cancelled
+    """
+    # Determine initial directory
+    if initial_dir and Path(initial_dir).exists():
+        start_dir = initial_dir
+    else:
+        start_dir = Path.cwd()
+
+    # Create a root window and hide it
+    root = tk.Tk()
+    root.withdraw()
+
+    # Open directory dialog
+    dir_path = filedialog.askdirectory(
+        title="Select Destination Folder for the Reports",
+        initialdir=start_dir
+    )
+
+    # Destroy the root window
+    root.destroy()
+
+    # Return Path object or None
+    return Path(dir_path) if dir_path else None
+
+
 def main():
     """Main entry point for the methylation report generator."""
     print("Methylation Report Generator")
     print("=" * 50)
     print("\nThis tool processes qPCR data from two targets.")
-    print("You will be prompted to select two raw data files:")
+    print("You will be prompted to select:")
     print("  1. Target 1 raw data file")
     print("  2. Target 2 raw data file")
+    print("  3. Destination folder for the reports")
     print("=" * 50)
 
     # Load configuration
-    last_dir = get_last_directory()
+    last_dir = get_saved_directory('last_directory')
 
     if last_dir:
         print(f"\nLast used directory: {last_dir}")
@@ -150,11 +205,37 @@ def main():
     # Detect assay type from the first file
     print("\n" + "=" * 50)
     print("Detecting assay type...")
-    assay_type, template_name, target1_name, target2_name = detect_assay_type(target1_file.name)
+    assay_type, target1_name, target2_name = detect_assay_type(target1_file.name)
     print(f"  Assay type: {assay_type}")
-    print(f"  Template: {template_name}")
     print(f"  Targets: {target1_name}, {target2_name}")
     print("=" * 50)
+
+    # Locate the template for the detected assay type before prompting for anything else,
+    # so a missing template is reported without the user working through the prompts first
+    template_file = get_template_file(assay_type)
+    if template_file is None:
+        print(f"\nError: No {assay_type} template has been set.")
+        print(f"Choose one with: methyl config set-template {assay_type.lower()}")
+        sys.exit(1)
+
+    if not template_file.exists():
+        print(f"\nError: Template file not found: {template_file}")
+        print(f"Choose a new one with: methyl config set-template {assay_type.lower()}")
+        sys.exit(1)
+    print(f"\nUsing template: {template_file.name}")
+
+    # Let the user choose where the reports are written, defaulting to the last choice
+    print("\nStep 3: Select the destination folder for the reports...")
+    output_dir = select_output_directory(
+        initial_dir=get_saved_directory('last_output_directory') or str(target2_file.parent)
+    )
+
+    if not output_dir:
+        print("No destination folder selected. Exiting.")
+        sys.exit(0)
+
+    save_setting('last_output_directory', str(output_dir))
+    print(f"Reports will be saved to: {output_dir}")
 
     # Identify target files based on filename
     print("\n" + "=" * 50)
@@ -259,16 +340,8 @@ def main():
     # Extract plate information for filename
     plate_number, date_mmddyy, initials = extract_plate_info(target1_file_sorted.name)
 
-    # Locate template file based on detected assay type
-    template_file = Path.cwd() / "template" / template_name
-    if not template_file.exists():
-        print(f"\nError: Template file not found: {template_file}")
-        sys.exit(1)
-    print(f"\nUsing template: {template_file.name}")
-
-    # Create output directory
-    output_dir = Path.cwd() / "output"
-    output_dir.mkdir(exist_ok=True)
+    # Create the destination folder only once there is something to write into it
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate reports
     print("\n" + "=" * 50)
