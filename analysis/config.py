@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
+# Re-exported so the processor keeps one source of truth with the shared parser
+from core.parser import UNDETERMINED_CQ
+
 GLOBAL_STD_THRESHOLD = 0.17
 GLOBAL_RQ_DIFF_THRESHOLD = 0.2
-
-# Cq value substituted for "Undetermined" wells when the raw file is read
-UNDETERMINED_CQ = 40
 
 # Written by `methyl config set-positive-control`, kept at the repo root
 SETTINGS_FILE = Path(__file__).resolve().parent.parent / ".methylation_config.json"
