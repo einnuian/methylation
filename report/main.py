@@ -8,50 +8,25 @@ import tkinter as tk
 from tkinter import filedialog
 from pathlib import Path
 import sys
-import json
 from data_parser import parse_qpcr_csv, get_all_samples
 from report_generator import generate_report_win32, get_control_selection, extract_plate_info
+from cli.settings import load_settings, save_setting
 
 
-# Configuration file path
-CONFIG_FILE = Path.cwd() / ".methylation_config.json"
-
-
-def load_config():
+def get_last_directory():
     """
-    Load the configuration file containing the last used directory.
+    Read the last used directory from the shared settings file.
 
     Returns:
-        dict: Configuration dictionary with 'last_directory' key, or default config
+        str: The saved directory if it still exists, otherwise None
     """
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                # Validate that the saved directory still exists
-                if 'last_directory' in config:
-                    saved_dir = Path(config['last_directory'])
-                    if saved_dir.exists():
-                        return config
-        except (json.JSONDecodeError, KeyError):
-            pass
+    last_dir = load_settings().get('last_directory')
 
-    # Return default config
-    return {'last_directory': None}
+    # Discard the saved directory if it has since been moved or deleted
+    if last_dir and Path(last_dir).exists():
+        return last_dir
 
-
-def save_config(config):
-    """
-    Save the configuration file with the last used directory.
-
-    Args:
-        config (dict): Configuration dictionary to save
-    """
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except Exception as e:
-        print(f"Warning: Could not save configuration: {e}")
+    return None
 
 
 def detect_assay_type(filename):
@@ -129,8 +104,7 @@ def main():
     print("=" * 50)
 
     # Load configuration
-    config = load_config()
-    last_dir = config.get('last_directory')
+    last_dir = get_last_directory()
 
     if last_dir:
         print(f"\nLast used directory: {last_dir}")
@@ -171,8 +145,7 @@ def main():
     print(f"File size: {target2_file.stat().st_size} bytes")
 
     # Save the directory for next time
-    config['last_directory'] = str(target2_file.parent)
-    save_config(config)
+    save_setting('last_directory', str(target2_file.parent))
 
     # Detect assay type from the first file
     print("\n" + "=" * 50)
@@ -220,8 +193,9 @@ def main():
         print(f"\nFound {len(all_samples)} unique samples")
 
         # Filter out control samples and NTC for the sample list
+        positive_control = load_settings()["positive_control"]
         test_samples = [s for s in all_samples if not s.startswith('Control ')
-                       and s != 'HCT116' and s != 'NTC']
+                       and s != positive_control and s != 'NTC']
 
         print(f"Test samples available: {len(test_samples)}")
 

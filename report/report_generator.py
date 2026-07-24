@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 from datetime import datetime
 from data_parser import parse_qpcr_csv, extract_sample_data
+from cli.settings import load_settings
 
 
 def extract_plate_info(filename: str) -> Tuple[str, str, str]:
@@ -521,9 +522,10 @@ def generate_report_win32(target1_file: Path, target2_file: Path, template_file:
     print("  Extracting sample data...")
     sample_data = extract_sample_data(target1_data, target2_data, sample_name, target1_name, target2_name)
 
-    # Extract HCT116 control data (always present)
-    print("  Extracting HCT116 control data...")
-    hct116_data = extract_sample_data(target1_data, target2_data, "HCT116", target1_name, target2_name)
+    # Extract positive control data (always present)
+    positive_control = load_settings()["positive_control"]
+    print(f"  Extracting {positive_control} control data...")
+    hct116_data = extract_sample_data(target1_data, target2_data, positive_control, target1_name, target2_name)
 
     # Extract control data if controls are specified
     target1_controls_data = []
